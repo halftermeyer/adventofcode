@@ -607,52 +607,52 @@ CYPHER 25
 // Traverse: allReduce prunes, NEXT extracts
 MATCH REPEATABLE ELEMENTS
   p = (init:Init)
-    (()-[t:INC|JZDEC_ZERO|JZDEC_POS]->())
+    -[rels:INC|JZDEC_ZERO|JZDEC_POS]->
       {1, 9223372036854775807}
     (h:Halt)
 WHERE allReduce(
-  m = {A: 0, B: 0}, t |
+  m = {A: 0, B: 0}, r IN rels |
   CASE
-    WHEN t:INC AND t.c = 'A'
+    WHEN r:INC AND r.c = 'A'
       THEN {A: m.A+1, B: m.B}
-    WHEN t:INC AND t.c = 'B'
+    WHEN r:INC AND r.c = 'B'
       THEN {A: m.A, B: m.B+1}
-    WHEN t:JZDEC_POS AND t.c = 'A'
+    WHEN r:JZDEC_POS AND r.c = 'A'
       THEN {A: m.A-1, B: m.B}
-    WHEN t:JZDEC_POS AND t.c = 'B'
+    WHEN r:JZDEC_POS AND r.c = 'B'
       THEN {A: m.A, B: m.B-1}
     ELSE m
   END,
   CASE
-    WHEN t:JZDEC_ZERO AND t.c = 'A'
+    WHEN r:JZDEC_ZERO AND r.c = 'A'
       THEN m.A = 0
-    WHEN t:JZDEC_ZERO AND t.c = 'B'
+    WHEN r:JZDEC_ZERO AND r.c = 'B'
       THEN m.B = 0
-    WHEN t:JZDEC_POS AND t.c = 'A'
-      THEN m.A > 0
-    WHEN t:JZDEC_POS AND t.c = 'B'
-      THEN m.B > 0
+    WHEN r:JZDEC_POS AND r.c = 'A'
+      THEN m.A >= 0
+    WHEN r:JZDEC_POS AND r.c = 'B'
+      THEN m.B >= 0
     ELSE true
   END
 )
-RETURN p
+RETURN rels, length(p) AS steps
 NEXT
 // Re-derive counters from the valid path
-RETURN length(p) AS steps,
-  reduce(m = {A:0, B:0},
-    t IN relationships(p) |
+LET final = reduce(m = {A:0, B:0},
+    r IN rels |
     CASE
-      WHEN t:INC AND t.c = 'A'
+      WHEN r:INC AND r.c = 'A'
         THEN {A: m.A+1, B: m.B}
-      WHEN t:INC AND t.c = 'B'
+      WHEN r:INC AND r.c = 'B'
         THEN {A: m.A, B: m.B+1}
-      WHEN t:JZDEC_POS AND t.c = 'A'
+      WHEN r:JZDEC_POS AND r.c = 'A'
         THEN {A: m.A-1, B: m.B}
-      WHEN t:JZDEC_POS AND t.c = 'B'
+      WHEN r:JZDEC_POS AND r.c = 'B'
         THEN {A: m.A, B: m.B-1}
       ELSE m
     END
-  ) AS result
+  )
+RETURN steps, final.A AS ctrA, final.B AS ctrB
 \end{lstlisting}
 \end{codeblock}
 
