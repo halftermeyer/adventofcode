@@ -40,11 +40,11 @@ Turing-complete. The proof proceeds by showing that a single
 expressions, and list comprehensions can simulate any 2-counter machine
 (Minsky machine). Since 2-counter machines are known to be
 Turing-complete, the result follows by reduction. We address the
-bounded-step objection via three complementary resolutions --- including
-a graph-native approach using quantified path patterns (QPP) with
-\texttt{allReduce}, where the machine \emph{is} the graph and
-computation \emph{is} path finding --- and verify all three constructions
-on a live Neo4j Aura instance.
+bounded-step objection inherent to \texttt{reduce()} via two
+complementary resolutions, and present a second, graph-native simulation
+using quantified path patterns (QPP) with \texttt{allReduce}, where the
+machine \emph{is} the graph and computation \emph{is} path finding. All
+three constructions are verified on a live Neo4j Aura instance.
 \end{abstract}
 
 \newpage
@@ -115,7 +115,11 @@ types, and a finite-state controller. If Cypher can simulate this, it
 can simulate \emph{anything}.
 \end{factbox}
 
-\subsection{Example: A 4-State Program}
+\subsection{Example: Program~$P_1$}
+
+The following 4-state program increments~$A$, tests~$B$, loops once to
+increment~$B$, then halts. It computes $f(n) = 2n$ on input $B = n$,
+leaving the result in~$A$.
 
 \begin{center}
 \begin{tikzpicture}[
@@ -136,24 +140,48 @@ can simulate \emph{anything}.
   \draw[->] (q1) -- node[elabel, right] {JZDEC(B), $B{>}0$} (q3);
   \draw[->] (q1) to[out=210,in=30] node[elabel, below, pos=0.45] {JZDEC(B), $B{=}0$} (q2);
   \draw[->] (q2) -- node[elabel, left] {INC(B)} (q0);
-  \draw[->] (q3) edge[loop right] node[elabel, right] {HALT} (q3);
 \end{tikzpicture}
 \end{center}
 \begin{center}
 \small\color{neo-muted}
-Figure 1 --- A 4-state 2-counter machine that increments~$A$, tests~$B$,
-loops or halts.
+Figure 1 --- Program~$P_1$: a 4-state 2-counter machine. We use this
+program as the running example throughout the paper.
 \end{center}
 
+\subsection{Expected Execution Trace}
+
+Starting from $(q_0,\; A{=}0,\; B{=}0)$:
+
+\begin{center}
+\small
+\begin{tabular}{@{}clccc@{}}
+\toprule
+\textbf{Step} & \textbf{Instruction} & \textbf{State} & \textbf{A} & \textbf{B} \\
+\midrule
+0 & $\texttt{INC}(A, q_1)$            & $q_0$ & $0 \to 1$ & 0 \\
+1 & $\texttt{JZDEC}(B, q_2, q_3)$; $B{=}0$ & $q_1$ & 1 & 0 \\
+2 & $\texttt{INC}(B, q_0)$            & $q_2$ & 1 & $0 \to 1$ \\
+3 & $\texttt{INC}(A, q_1)$            & $q_0$ & $1 \to 2$ & 1 \\
+4 & $\texttt{JZDEC}(B, q_2, q_3)$; $B{>}0$ & $q_1$ & 2 & $1 \to 0$ \\
+5 & $\texttt{HALT}$                    & $q_3$ & 2 & 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Expected result:} $\{state: -1,\; A: 2,\; B: 0\}$
+
 
 % ═══════════════════════════════════════════════════════════════════
-% §3 ENCODING IN CYPHER
+% §3 APPROACH 1: PURE REDUCE()
 % ═══════════════════════════════════════════════════════════════════
-\section{Encoding in Cypher}
+\section{Approach~1: Pure \texttt{reduce()}}
 
-\subsection{Program Encoding}
+This approach encodes the entire simulation as a single \texttt{RETURN}
+statement --- no graph writes, no side effects.
 
-Encode the transition function~$\delta$ as a Cypher \textbf{list of maps}:
+\subsection{Encoding}
+
+The transition function~$\delta$ becomes a Cypher \textbf{list of maps}:
 
 \begin{codeblock}
 \begin{lstlisting}
@@ -169,27 +197,11 @@ LET program = [
 This is a \emph{finite, static} list --- no graph writes needed.
 \texttt{program[i]} gives $\delta(q_i)$ in $O(1)$.
 
-\subsection{Machine State}
+The full machine configuration $(q,\; c_A,\; c_B)$ is a single Cypher
+\textbf{map}: \texttt{\{state: 0, A: 0, B: 0\}}.
+Convention: \texttt{state = -1} means \emph{halted}.
 
-The full machine configuration $(q,\; c_A,\; c_B)$ is a single Cypher \textbf{map}:
-
-\begin{codeblock}
-\begin{lstlisting}
-{state: 0, A: 0, B: 0}
-\end{lstlisting}
-\end{codeblock}
-
-Conventions: \texttt{state = -1} means \emph{halted}; counters are
-non-negative integers; the initial configuration is
-\texttt{\{state: 0, A: 0, B: 0\}}.
-
-
-% ═══════════════════════════════════════════════════════════════════
-% §4 THE SIMULATION
-% ═══════════════════════════════════════════════════════════════════
-\section{The Simulation}
-
-\subsection{Core \texttt{reduce()} Implementation}
+\subsection{Simulation}
 
 Each iteration of \texttt{reduce()} performs \textbf{one machine step}:
 
@@ -237,7 +249,7 @@ Figure 2 --- Execution flow of one \texttt{reduce()} iteration.
 \begin{lstlisting}
 CYPHER 25
 LET program = [ /* ... as above ... */ ]
-LET max_steps = 1000000  // arbitrary bound (see §5)
+LET max_steps = 1000000  // arbitrary bound (see §4)
 
 LET result = reduce(
   machine = {state: 0, A: 0, B: 0},
@@ -302,11 +314,7 @@ This wraps the expression in a single-element list \texttt{[expr]},
 the comprehension \emph{binds} the variable name, and \texttt{head()}
 unwraps the result.
 
-
-% ═══════════════════════════════════════════════════════════════════
-% §5 CORRECTNESS PROOF
-% ═══════════════════════════════════════════════════════════════════
-\section{Correctness Proof}
+\subsection{Correctness}
 
 \begin{theorembox}[Claim]
 After $k$~iterations of \texttt{reduce()}, the value of
@@ -362,27 +370,19 @@ configuration after $k{+}1$ steps.
 
 
 % ═══════════════════════════════════════════════════════════════════
-% §6 THE BOUNDED-STEP OBJECTION
+% §4 THE BOUNDED-STEP OBJECTION
 % ═══════════════════════════════════════════════════════════════════
 \section{The Bounded-Step Objection}
 
 The \texttt{reduce()} proof uses \texttt{range(1, max\_steps)} --- a
 \emph{finite} bound. Strict Turing-completeness requires
-\emph{unbounded} computation.
+\emph{unbounded} computation. We offer two complementary resolutions.
 
-\begin{center}
-\begin{tabular}{@{}llp{7cm}@{}}
-\toprule
-\textbf{Approach} & \textbf{Mechanism} & \textbf{Achieves} \\
-\midrule
-\S6.1 & \texttt{IN TRANSACTIONS} & Loop up to $2^{63}$ steps --- practically unbounded \\
-\S6.2 & Sufficiency argument & Set bound = halting time --- universal for total functions \\
-\S6.3 & QPP + \texttt{allReduce} & Machine \emph{is} graph; computation \emph{is} path finding \\
-\bottomrule
-\end{tabular}
-\end{center}
+\subsection{Resolution~1: \texttt{IN TRANSACTIONS}}
 
-\subsection{Resolution via IN TRANSACTIONS}
+\textsc{Cypher~25} provides iteration via \texttt{IN TRANSACTIONS} with
+\texttt{ON ERROR BREAK}. The machine state is stored in the graph and
+mutated transactionally:
 
 \begin{codeblock}
 \begin{lstlisting}
@@ -476,9 +476,9 @@ bound, so this does not achieve \emph{theoretical} unbounded computation.
 True unbounded execution would require an external driver (e.g., a
 client-side loop that restarts the query if it hasn't halted). In
 practice, $2^{63} \approx 9.2 \times 10^{18}$ steps exceeds any
-physically realizable computation.
+physically realizable computation --- the universe will end first.
 
-\subsection{Resolution via Sufficiency Argument}
+\subsection{Resolution~2: Sufficiency Argument}
 
 For any Turing machine~$T$ on input~$w$ that halts in $f(|w|)$ steps:
 \[
@@ -497,23 +497,29 @@ Since:
 
 This shows Cypher is \textbf{computationally universal for total
 functions}. The gap with full Turing-completeness concerns only
-non-halting computations (addressed by \S6.1).
+non-halting computations (addressed by Resolution~1).
 
-\subsection{Resolution via Graph-Native QPP Traversal}
 
-The most idiomatic approach: model the machine \emph{as a graph}
-and let pattern matching \emph{be} the computation.
+% ═══════════════════════════════════════════════════════════════════
+% §5 APPROACH 2: GRAPH-NATIVE QPP
+% ═══════════════════════════════════════════════════════════════════
+\section{Approach~2: Graph-Native QPP Traversal}
 
-\textbf{Idea.} Encode each state $q_i$ as a node and each instruction as
-a typed relationship (\texttt{:INC}, \texttt{:JZDEC\_ZERO},
-\texttt{:JZDEC\_POS}). A valid execution trace is a path from
-\texttt{:Init} to \texttt{:Halt}. The \texttt{allReduce} predicate
-prunes invalid branches eagerly during traversal.
+Approach~1 treats Cypher as a functional language that happens to run on
+a graph database. This second approach embraces the graph:\ the machine
+\emph{is} the graph, and computation \emph{is} path finding.
+
+\subsection{Encoding the Machine as a Graph}
+
+Each state $q_i$ becomes a node. Each instruction becomes a typed,
+directed relationship. The \texttt{JZDEC} instruction is split into two
+relationship types --- \texttt{JZDEC\_ZERO} (taken when the counter
+is~$0$) and \texttt{JZDEC\_POS} (taken when the counter is positive) ---
+so that the graph captures the branching structure directly.
 
 \begin{codeblock}
 \begin{lstlisting}
 CYPHER 25
-// Build the machine graph
 CREATE (q0:State:Init {name: 'q0'})
 CREATE (q1:State      {name: 'q1'})
 CREATE (q2:State      {name: 'q2'})
@@ -525,10 +531,19 @@ CREATE (q2)-[:INC        {c:'B'}]->(q0)
 \end{lstlisting}
 \end{codeblock}
 
+No \texttt{HALT} self-loop is needed: reaching a \texttt{:Halt} node
+terminates the pattern naturally.
+
+\subsection{Simulation via \texttt{allReduce}}
+
+A valid execution trace is a path from \texttt{:Init} to \texttt{:Halt}
+that respects the counter constraints at every step. The
+\texttt{allReduce} predicate in a quantified path pattern (QPP) enforces
+these constraints and prunes invalid branches eagerly during traversal.
+
 \begin{codeblock}
 \begin{lstlisting}
 CYPHER 25
-// Traverse: allReduce prunes, NEXT extracts
 MATCH REPEATABLE ELEMENTS
   p = (init:Init)
     -[rels:INC|JZDEC_ZERO|JZDEC_POS]->
@@ -561,7 +576,6 @@ WHERE allReduce(
 )
 RETURN rels, length(p) AS steps
 NEXT
-// Re-derive counters from the valid path
 LET final = reduce(m = {A:0, B:0},
     r IN rels |
     CASE
@@ -580,32 +594,45 @@ RETURN steps, final.A AS ctrA, final.B AS ctrB
 \end{lstlisting}
 \end{codeblock}
 
-\textbf{Key properties:}
-\begin{itemize}[leftmargin=1.5em]
-  \item The machine \emph{is} the graph; computation \emph{is} path finding.
-  \item \texttt{REPEATABLE ELEMENTS} allows revisiting states (loops).
-  \item \texttt{allReduce} prunes eagerly: once a \texttt{JZDEC}
-        branch fails the predicate, that path is abandoned immediately.
-  \item No HALT self-loop needed --- reaching a \texttt{:Halt} node
-        terminates the pattern.
-  \item \texttt{reduce()} in the \texttt{NEXT} stage re-derives
-        final counter values from the surviving path
-        (same pattern as~\cite{evblog}).
-\end{itemize}
+\subsection{How \texttt{allReduce} Works}
+
+\texttt{allReduce(acc, var IN groupVar | updateExpr, predicateExpr)}
+folds over the relationships in a QPP match, updating the accumulator at
+each step and checking the predicate. If the predicate ever returns
+\texttt{false}, the path is \textbf{pruned immediately} --- the engine
+does not continue exploring that branch.
 
 \textbf{Subtlety: post-update predicate.}
-The \texttt{allReduce} predicate is evaluated on the \emph{post-update}
-accumulator. For \texttt{JZDEC\_POS}, the update decrements the counter
-first, then the predicate checks $\geq 0$ (not $> 0$). This ensures
-that decrementing from~$1$ to~$0$ is accepted.
+The predicate is evaluated on the \emph{post-update} accumulator. For
+\texttt{JZDEC\_POS}, the update decrements the counter first, then the
+predicate checks $\geq 0$ (not $> 0$). This ensures that decrementing
+from~$1$ to~$0$ is accepted.
+
+Since \texttt{allReduce} does not expose the final accumulator value,
+\texttt{reduce()} in the \texttt{NEXT} stage re-derives the counter
+values from the surviving path
+(same pattern as~\cite{evblog}).
+
+\subsection{Key Properties}
+
+\begin{itemize}[leftmargin=1.5em]
+  \item The machine \emph{is} the graph; computation \emph{is} path finding.
+  \item \texttt{REPEATABLE ELEMENTS} allows revisiting states (loops are
+        essential for Turing-completeness).
+  \item \texttt{allReduce} prunes eagerly: once a \texttt{JZDEC} branch
+        fails the predicate, that entire sub-tree is abandoned.
+  \item The \texttt{\{0, $2^{63}{-}1$\}} quantifier handles the
+        degenerate case where the initial state \emph{is} the halt state
+        (zero-step computation).
+\end{itemize}
 
 
 % ═══════════════════════════════════════════════════════════════════
-% §7 REQUIRED PRIMITIVES
+% §6 REQUIRED PRIMITIVES
 % ═══════════════════════════════════════════════════════════════════
 \section{Required Primitives}
 
-The proof uses only:
+\subsection{Approach~1 (\texttt{reduce()})}
 
 \begin{center}
 \begin{tabular}{@{}lp{8.5cm}@{}}
@@ -627,9 +654,30 @@ List indexing \texttt{program[i]} & $O(1)$ \textbf{instruction lookup} \\
 Pure Cypher expressions suffice.
 \end{neoquote}
 
+\subsection{Approach~2 (QPP)}
+
+\begin{center}
+\begin{tabular}{@{}lp{8.5cm}@{}}
+\toprule
+\textbf{Primitive} & \textbf{Role in the proof} \\
+\midrule
+\texttt{MATCH REPEATABLE ELEMENTS} & QPP with revisitable nodes \\
+\texttt{allReduce()} & Per-step accumulator + predicate pruning \\
+Relationship types \& properties & Encode instructions \\
+Node labels (\texttt{:Init}, \texttt{:Halt}) & Mark start and end states \\
+\texttt{reduce()} in \texttt{NEXT} & Extract final counter values \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{neoquote}
+\textbf{Graph operations \emph{are} the computation.}
+The machine is the data model; pattern matching is the execution engine.
+\end{neoquote}
+
 
 % ═══════════════════════════════════════════════════════════════════
-% §8 COROLLARIES
+% §7 COROLLARIES
 % ═══════════════════════════════════════════════════════════════════
 \section{Corollaries}
 
@@ -659,51 +707,27 @@ as imperative loops.
 
 
 % ═══════════════════════════════════════════════════════════════════
-% §9 VERIFIED EXECUTION
+% §8 VERIFIED EXECUTION
 % ═══════════════════════════════════════════════════════════════════
 \section{Verified Execution on Neo4j Aura}
 
-Both simulation approaches were tested on a Neo4j Aura instance running
-Neo4j~5.x with \textsc{Cypher~25} support.
+All three constructions were tested on a Neo4j Aura instance running
+Neo4j~5.x with \textsc{Cypher~25} support, using program~$P_1$ from~\S2.
 
-\subsection{Test Program: Manual Trace}
-
-The 4-instruction program from \S3.1:
-
-\begin{center}
-\small
-\begin{tabular}{@{}clccc@{}}
-\toprule
-\textbf{Step} & \textbf{Instruction} & \textbf{State} & \textbf{A} & \textbf{B} \\
-\midrule
-0 & $\texttt{INC}(A, q_1)$            & $q_0$ & $0 \to 1$ & 0 \\
-1 & $\texttt{JZDEC}(B, q_2, q_3)$; $B{=}0$ & $q_1$ & 1 & 0 \\
-2 & $\texttt{INC}(B, q_0)$            & $q_2$ & 1 & $0 \to 1$ \\
-3 & $\texttt{INC}(A, q_1)$            & $q_0$ & $1 \to 2$ & 1 \\
-4 & $\texttt{JZDEC}(B, q_2, q_3)$; $B{>}0$ & $q_1$ & 2 & $1 \to 0$ \\
-5 & $\texttt{HALT}$                    & $q_3$ & 2 & 0 \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\textbf{Expected result:} \texttt{\{state: -1, A: 2, B: 0\}}
-
-\subsection{Results}
-
-\begin{resultbox}[Result: \texttt{reduce()} simulation]
+\begin{resultbox}[Approach 1: \texttt{reduce()} simulation]
 \texttt{\{A: 2, B: 0, state: -1\}} \quad$\checkmark$
 \end{resultbox}
 
-\begin{resultbox}[Result: \texttt{IN TRANSACTIONS} simulation]
+\begin{resultbox}[Approach 1b: \texttt{IN TRANSACTIONS} simulation]
 \texttt{m.state = -1, m.A = 2, m.B = 0} \quad$\checkmark$
 \end{resultbox}
 
-\begin{resultbox}[Result: QPP \texttt{allReduce} traversal]
+\begin{resultbox}[Approach 2: QPP \texttt{allReduce} traversal]
 \texttt{steps = 5, ctrA = 2, ctrB = 0} \quad$\checkmark$
 \end{resultbox}
 
 All three approaches produce the expected result, matching the manual
-trace step-for-step.
+trace from~\S2 step-for-step.
 
 
 % ═══════════════════════════════════════════════════════════════════
