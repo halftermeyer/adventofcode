@@ -406,6 +406,202 @@ Both approaches tested on Aura (Neo4j 5.x, \textsc{Cypher~25}). Test program: 4 
 \texttt{m.state=-1, m.A=2, m.B=0} \enspace$\checkmark$
 \end{sresult}
 
+% ═══ §9 ═══════════════════════════════════════════════════════════
+\section{Complete Runnable Queries}
+
+The following two queries are copy-paste ready for any Neo4j instance
+with \textsc{Cypher~25} support. They encode the 4-state test program
+from \S2 and can be adapted to any 2-counter machine by editing the
+\texttt{program} list.
+
+\subsection{Approach 1: Pure \texttt{reduce()}}
+
+A single \texttt{RETURN} statement --- no graph writes, no side effects.
+The \texttt{head([v IN [expr] | ...])} idiom provides let-binding
+inside \texttt{reduce()} (where \texttt{LET} is unavailable): it wraps
+the expression in a one-element list, the comprehension binds the
+variable, and \texttt{head()} unwraps the result.
+
+\begin{smallcode}
+\begin{lstlisting}[style=cypher-dense]
+CYPHER 25
+LET program = [
+  {state: 0, op: 'INC',   counter: 'A',
+   next: 1},
+  {state: 1, op: 'JZDEC', counter: 'B',
+   q_zero: 2, q_pos: 3},
+  {state: 2, op: 'INC',   counter: 'B',
+   next: 0},
+  {state: 3, op: 'HALT',  counter: '',
+   next: 3}
+]
+LET max_steps = 1000000
+
+LET result = reduce(
+  machine = {state: 0, A: 0, B: 0},
+  step IN range(1, max_steps) |
+  CASE WHEN machine.state = -1
+    THEN machine
+  ELSE
+    head([instr IN [program[machine.state]] |
+      CASE instr.op
+        WHEN 'INC' THEN
+          CASE instr.counter
+            WHEN 'A' THEN
+              {state: instr.next,
+               A: machine.A + 1, B: machine.B}
+            WHEN 'B' THEN
+              {state: instr.next,
+               A: machine.A, B: machine.B + 1}
+          END
+        WHEN 'JZDEC' THEN
+          CASE instr.counter
+            WHEN 'A' THEN
+              CASE WHEN machine.A = 0
+                THEN {state: instr.q_zero,
+                      A: 0, B: machine.B}
+                ELSE {state: instr.q_pos,
+                      A: machine.A - 1,
+                      B: machine.B}
+              END
+            WHEN 'B' THEN
+              CASE WHEN machine.B = 0
+                THEN {state: instr.q_zero,
+                      A: machine.A, B: 0}
+                ELSE {state: instr.q_pos,
+                      A: machine.A,
+                      B: machine.B - 1}
+              END
+          END
+        WHEN 'HALT' THEN
+          {state: -1,
+           A: machine.A, B: machine.B}
+      END
+    ])
+  END
+)
+RETURN result
+\end{lstlisting}
+\end{smallcode}
+
+\subsection{Approach 2: \texttt{IN TRANSACTIONS}}
+
+Uses graph storage for state persistence.
+The \texttt{1/0} guard fires \emph{before} any list indexing when
+halted, caught by \texttt{ON ERROR BREAK}.
+
+\begin{smallcode}
+\begin{lstlisting}[style=cypher-dense]
+CYPHER 25
+CREATE (:Machine {state: 0, A: 0, B: 0});
+\end{lstlisting}
+\end{smallcode}
+
+\vspace{-0.5em}
+
+\begin{smallcode}
+\begin{lstlisting}[style=cypher-dense]
+CYPHER 25
+LET program = [
+  {state: 0, op: 'INC',   counter: 'A',
+   next: 1},
+  {state: 1, op: 'JZDEC', counter: 'B',
+   q_zero: 2, q_pos: 3},
+  {state: 2, op: 'INC',   counter: 'B',
+   next: 0},
+  {state: 3, op: 'HALT',  counter: '',
+   next: 3}
+]
+
+UNWIND range(1, 9223372036854775807) AS step
+CALL (step) {
+  MATCH (m:Machine)
+  WITH m,
+    CASE WHEN m.state = -1 THEN 1/0
+         ELSE program[m.state]
+    END AS instr
+  SET m.state = CASE instr.op
+    WHEN 'INC' THEN instr.next
+    WHEN 'JZDEC' THEN
+      CASE instr.counter
+        WHEN 'A' THEN
+          CASE WHEN m.A = 0
+            THEN instr.q_zero
+            ELSE instr.q_pos END
+        WHEN 'B' THEN
+          CASE WHEN m.B = 0
+            THEN instr.q_zero
+            ELSE instr.q_pos END
+      END
+    WHEN 'HALT' THEN -1
+    END,
+  m.A = CASE
+    WHEN instr.op = 'INC'
+      AND instr.counter = 'A'
+      THEN m.A + 1
+    WHEN instr.op = 'JZDEC'
+      AND instr.counter = 'A'
+      AND m.A > 0 THEN m.A - 1
+    ELSE m.A END,
+  m.B = CASE
+    WHEN instr.op = 'INC'
+      AND instr.counter = 'B'
+      THEN m.B + 1
+    WHEN instr.op = 'JZDEC'
+      AND instr.counter = 'B'
+      AND m.B > 0 THEN m.B - 1
+    ELSE m.B END
+} IN TRANSACTIONS OF 1 ROW
+  ON ERROR BREAK
+\end{lstlisting}
+\end{smallcode}
+
+\begin{smallcode}
+\begin{lstlisting}[style=cypher-dense]
+// Read result:
+MATCH (m:Machine) RETURN m;
+\end{lstlisting}
+\end{smallcode}
+
+\subsection{Execution Flow}
+
+\begin{center}
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+  >=Stealth,
+  node distance=1.2cm,
+  box/.style={rectangle, rounded corners=2pt, draw=neo-blue!60,
+    fill=neo-marigold!12, thick, minimum height=0.7cm,
+    text width=2.2cm, align=center, font=\tiny},
+  decision/.style={diamond, draw=neo-blue!60, fill=neo-marigold!12,
+    thick, minimum height=0.7cm, aspect=2, align=center, font=\tiny},
+  action/.style={rectangle, rounded corners=2pt, draw=neo-teal,
+    fill=neo-teal!10, thick, minimum height=0.6cm,
+    text width=1.8cm, align=center, font=\tiny},
+  every edge/.style={draw, thick, ->, >=Stealth},
+  edgelabel/.style={font=\tiny, inner sep=1pt},
+]
+  \node[box] (read) {Read state\\{\ttfamily machine.state}};
+  \node[box, right=1cm of read] (fetch) {Fetch instr\\{\ttfamily program[state]}};
+  \node[decision, right=1cm of fetch] (type) {Instr\\type?};
+  \node[action, above right=0.5cm and 1cm of type] (inc) {Increment\\Update state};
+  \node[decision, right=1cm of type] (zero) {Counter\\$= 0$?};
+  \node[action, below right=0.5cm and 1cm of type] (halt) {state $= -1$};
+  \node[action, above right=0.4cm and 0.8cm of zero] (gz) {Go to $q_z$};
+  \node[action, below right=0.4cm and 0.8cm of zero] (gp) {Dec, go $q_p$};
+
+  \draw[->] (read) -- (fetch);
+  \draw[->] (fetch) -- (type);
+  \draw[->] (type) -- node[edgelabel, above left] {INC} (inc);
+  \draw[->] (type) -- node[edgelabel, above] {JZDEC} (zero);
+  \draw[->] (type) -- node[edgelabel, below left] {HALT} (halt);
+  \draw[->] (zero) -- node[edgelabel, above left] {Y} (gz);
+  \draw[->] (zero) -- node[edgelabel, below left] {N} (gp);
+\end{tikzpicture}%
+}\\[1pt]
+{\scriptsize\color{neo-muted}Fig.\,3 --- One \texttt{reduce()} iteration: read state, fetch, branch, update.}
+\end{center}
+
 % ═══ REFERENCES ═══════════════════════════════════════════════════
 \begin{thebibliography}{9}
 \small
