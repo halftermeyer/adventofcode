@@ -380,6 +380,35 @@ Map \texttt{\{s,A,B\}} & State repr. \\
 \textbf{No graph operations. No APOC. No GDS.}
 
 % ═══ §8 ═══════════════════════════════════════════════════════════
+\section{Corollaries}
+
+\begin{sfact}[Corollary 1: Undecidability of termination]
+Since \textsc{Cypher~25} can simulate any 2-counter machine, it is
+\emph{undecidable} whether a given \texttt{reduce()} expression
+will terminate.
+(By Rice's theorem applied to the reduction from 2CM.)
+\end{sfact}
+
+\begin{sfact}[Corollary 2: Practical implications]
+Cypher can compute any computable function: game-tree search via
+nested \texttt{reduce()} with alpha-beta pruning, Gaussian
+elimination via list-of-lists, genetic algorithms via iterated
+\texttt{reduce()} over populations, and any algorithm expressible
+as a fold.
+\end{sfact}
+
+\begin{sfact}[Corollary 3: Beyond computability]
+While \texttt{reduce()} makes Cypher Turing-complete for
+\emph{computation}, graph pattern matching with QPP and
+\texttt{allReduce} provides \emph{declarative constrained
+traversal} with per-step pruning --- something most
+Turing-complete languages lack. This is not about computability
+(all TC languages are equivalent) but about \textbf{expressiveness}:
+some problems are more naturally expressed as graph patterns than
+as imperative loops.
+\end{sfact}
+
+% ═══ §9 ═══════════════════════════════════════════════════════════
 \section{Verified on Neo4j Aura}
 
 Both approaches tested on Aura (Neo4j 5.x, \textsc{Cypher~25}). Test program: 4 instructions, expected $\{-1, 2, 0\}$.
