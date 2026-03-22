@@ -1,38 +1,57 @@
 % !TEX program = xelatex
-\documentclass[9pt,a4paper,twocolumn]{article}
-\usepackage{neo4j-article}
-\usepackage{colortbl}
-\usepackage{multicol}
+\documentclass[sigconf, nonacm]{acmart}
 
-% ─── Dense overrides ───────────────────────────────────────────────
-\geometry{a4paper,top=22mm,bottom=20mm,left=15mm,right=15mm,columnsep=8mm}
-\setlength{\parskip}{2pt plus 1pt}
-\setlength{\parindent}{0pt}
-\setlength{\abovecaptionskip}{4pt}
-\setlength{\belowcaptionskip}{2pt}
-\setlength{\abovedisplayskip}{6pt}
-\setlength{\belowdisplayskip}{6pt}
+% ─── Packages ─────────────────────────────────────────────────────
+\usepackage{listings}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
+\usepackage{booktabs}
+\usepackage{enumitem}
 
-% Tighter sections
-\titlespacing*{\section}{0pt}{1.8ex plus 0.5ex}{0.8ex plus 0.2ex}
-\titlespacing*{\subsection}{0pt}{1.2ex plus 0.5ex}{0.5ex plus 0.1ex}
-\titleformat{\section}
-  {\headingfont\large\bfseries\color{neo-blue}}
-  {\color{neo-teal}\S\thesection}{0.5em}{}
-  [\vspace{-0.5ex}{\color{neo-teal}\titlerule[1.5pt]}]
-\titleformat{\subsection}
-  {\headingfont\normalsize\bfseries\color{neo-dark-blue}}
-  {\color{neo-teal}\S\thesubsection}{0.4em}{}
+% ─── Colors (neutral — no branding) ──────────────────────────────
+\definecolor{code-bg}{HTML}{1E1E2E}
+\definecolor{code-text}{HTML}{CDD6F4}
+\definecolor{kw-blue}{HTML}{89B4FA}
+\definecolor{kw-teal}{HTML}{94E2D5}
+\definecolor{kw-green}{HTML}{A6E3A1}
+\definecolor{str-peach}{HTML}{FAB387}
+\definecolor{comment-gray}{HTML}{6C7086}
+\definecolor{accent-blue}{HTML}{1E66F5}
+\definecolor{accent-green}{HTML}{40A02B}
+\definecolor{box-bg}{HTML}{EFF1F5}
+\definecolor{box-border}{HTML}{7287FD}
+\definecolor{proof-border}{HTML}{40A02B}
+\definecolor{fact-border}{HTML}{179299}
+\definecolor{result-border}{HTML}{40A02B}
 
-% Smaller code
-\lstdefinestyle{cypher-dense}{
+% ─── Cypher language definition ───────────────────────────────────
+\lstdefinelanguage{Cypher}{
+  morekeywords={MATCH,WHERE,RETURN,WITH,CREATE,MERGE,SET,DELETE,DETACH,
+    REMOVE,ORDER,BY,LIMIT,SKIP,UNWIND,FOREACH,CALL,YIELD,
+    CASE,WHEN,THEN,ELSE,END,AND,OR,NOT,IN,AS,IS,NULL,
+    TRUE,FALSE,LET,NEXT,FILTER,CYPHER,
+    OPTIONAL,DISTINCT,UNION,ALL,
+    ON,ERROR,BREAK,TRANSACTIONS,OF,ROW},
+  morekeywords=[2]{reduce,head,range,size,count,sum,collect,
+    toInteger,split,trim,coalesce,toString,abs},
+  morekeywords=[3]{INC,JZDEC,HALT},
+  sensitive=true,
+  morestring=[b]',
+  morestring=[b]",
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+}
+
+\lstdefinestyle{cypher}{
   language=Cypher,
-  basicstyle=\ttfamily\fontsize{6.5pt}{8pt}\selectfont\color{neo-off-white},
-  keywordstyle=\color{neo-cyan}\bfseries,
-  keywordstyle=[2]\color{neo-teal},
-  keywordstyle=[3]\color{neo-light-green},
-  stringstyle=\color{neo-marigold},
-  commentstyle=\color{gray}\itshape,
+  basicstyle=\ttfamily\fontsize{7pt}{8.5pt}\selectfont\color{code-text},
+  keywordstyle=\color{kw-blue}\bfseries,
+  keywordstyle=[2]\color{kw-teal},
+  keywordstyle=[3]\color{kw-green},
+  stringstyle=\color{str-peach},
+  commentstyle=\color{comment-gray}\itshape,
   numbers=none,
   breaklines=true,
   tabsize=2,
@@ -43,84 +62,79 @@
   belowskip=0pt,
 }
 
-% Smaller codeblock
-\newtcolorbox{smallcode}{%
-  colback=neo-darkest,colframe=neo-darkest,
-  coltext=neo-off-white,
+% ─── Code block ───────────────────────────────────────────────────
+\newtcolorbox{codeblock}{%
+  colback=code-bg,colframe=code-bg,
+  coltext=code-text,
   boxrule=0pt,
-  borderline west={2pt}{0pt}{neo-teal},
-  arc=1pt,
-  left=4pt,right=4pt,top=3pt,bottom=3pt,
+  borderline west={2pt}{0pt}{kw-teal},
+  arc=2pt,
+  left=5pt,right=5pt,top=4pt,bottom=4pt,
   breakable,
-  before skip=0.5em,after skip=0.5em,
+  before skip=0.6em,after skip=0.6em,
 }
 
-% Smaller boxes
-\newtcolorbox{stheorem}[1][Theorem]{%
-  colback=neo-surface,colframe=neo-blue,
-  fonttitle=\headingfont\small\bfseries\color{neo-blue},title=#1,
-  boxrule=1pt,arc=1pt,left=4pt,right=4pt,top=3pt,bottom=3pt,
-  before skip=0.5em,after skip=0.5em}
+% ─── Theorem-like tcolorboxes ─────────────────────────────────────
+\newtcolorbox{claimbox}[1][Theorem]{%
+  colback=box-bg,colframe=box-border,
+  fonttitle=\bfseries\color{accent-blue},title=#1,
+  boxrule=1pt,arc=2pt,left=5pt,right=5pt,top=4pt,bottom=4pt,
+  before skip=0.6em,after skip=0.6em}
 
-\newtcolorbox{sproof}[1][Proof]{%
-  colback={neo-green!5!white},colframe=neo-green,
-  fonttitle=\headingfont\small\bfseries\color{neo-green},title=#1,
-  boxrule=1pt,arc=1pt,left=4pt,right=4pt,top=3pt,bottom=3pt,
-  before skip=0.5em,after skip=0.5em,
+\newtcolorbox{proofbox}[1][Proof]{%
+  colback={proof-border!5!white},colframe=proof-border,
+  fonttitle=\bfseries\color{accent-green},title=#1,
+  boxrule=1pt,arc=2pt,left=5pt,right=5pt,top=4pt,bottom=4pt,
+  before skip=0.6em,after skip=0.6em,
   after upper={\hfill$\square$}}
 
-\newtcolorbox{sresult}[1][Result]{%
-  colback={neo-light-green!8!white},colframe=neo-light-green,
-  fonttitle=\headingfont\small\bfseries\color{neo-green},title=#1,
-  boxrule=1pt,arc=1pt,left=4pt,right=4pt,top=3pt,bottom=3pt,
-  before skip=0.5em,after skip=0.5em}
+\newtcolorbox{resultbox}[1][Result]{%
+  colback={result-border!6!white},colframe=result-border,
+  fonttitle=\bfseries\color{accent-green},title=#1,
+  boxrule=1pt,arc=2pt,left=5pt,right=5pt,top=4pt,bottom=4pt,
+  before skip=0.6em,after skip=0.6em}
 
-\newtcolorbox{sfact}[1][Fact]{%
-  colback=neo-surface,colframe=neo-teal,
-  fonttitle=\headingfont\small\bfseries\color{neo-blue},title=#1,
-  boxrule=0.8pt,arc=1pt,left=4pt,right=4pt,top=3pt,bottom=3pt,
-  before skip=0.5em,after skip=0.5em}
+\newtcolorbox{factbox}[1][Fact]{%
+  colback=box-bg,colframe=fact-border,
+  fonttitle=\bfseries\color{accent-blue},title=#1,
+  boxrule=0.8pt,arc=2pt,left=5pt,right=5pt,top=4pt,bottom=4pt,
+  before skip=0.6em,after skip=0.6em}
 
-% ─── Document ──────────────────────────────────────────────────────
-\title{Cypher is Turing-Complete}
+% ─── ACM metadata ────────────────────────────────────────────────
+\title{Cypher is Turing-Complete: \\
+  A Formal Proof via 2-Counter Machine Simulation}
+
 \author{Pierre Halftermeyer}
-\date{March 2026}
+\email{pierre.halftermeyer@neo4j.com}
+\affiliation{%
+  \institution{Neo4j}
+  \country{France}
+}
+
+\begin{abstract}
+We prove that Cypher~25, the graph query language of Neo4j, is
+Turing-complete. The proof proceeds by showing that a single
+\texttt{RETURN} statement using \texttt{reduce()}, \texttt{CASE}
+expressions, and list comprehensions can simulate any 2-counter machine
+(Minsky 1967). We address the bounded-step objection via two
+complementary resolutions and verify the construction by executing
+the simulation on a live Neo4j Aura instance.
+\end{abstract}
+
+\keywords{Turing completeness, graph query languages, Cypher, 2-counter machines, computational expressiveness}
 
 \begin{document}
 
-% ═══ TITLE BANNER (full width) ════════════════════════════════════
-\twocolumn[{%
-  \begin{center}
-    \vspace*{-8mm}
-    \includegraphics[width=30mm]{assets/logo.png}\\[6pt]
-    {\headingfont\LARGE\bfseries\color{neo-blue}Cypher is Turing-Complete}\\[4pt]
-    {\headingfont\normalsize\color{neo-dark-blue}A Formal Proof via 2-Counter Machine Simulation}\\[6pt]
-    {\small\color{neo-muted}Pierre Halftermeyer \enspace$\cdot$\enspace Neo4j \enspace$\cdot$\enspace March 2026}\\[8pt]
-  \end{center}
-  \begin{tcolorbox}[
-    colback=neo-surface,colframe=neo-teal,boxrule=0pt,
-    borderline west={2pt}{0pt}{neo-teal},arc=0pt,
-    left=8pt,right=8pt,top=5pt,bottom=5pt,
-    fontupper=\color{neo-muted}\small,
-    before skip=0pt,after skip=8pt,
-  ]
-  \textbf{\headingfont\color{neo-blue}Abstract.}\enspace
-  We prove that \textsc{Cypher~25} is Turing-complete by showing that
-  \texttt{reduce()}, \texttt{CASE}, and list comprehensions can simulate
-  any 2-counter machine (Minsky 1967). We address the bounded-step
-  objection and verify the construction on Neo4j Aura.
-  \end{tcolorbox}
-  \vspace{2pt}
-}]
+\maketitle
 
 % ═══ §1 ═══════════════════════════════════════════════════════════
 \section{The Claim}
 
-\begin{stheorem}
-\textsc{Cypher~25}, restricted to a single \texttt{RETURN} with
-\texttt{reduce()}, list comprehensions, and \texttt{CASE},
-\textbf{is Turing-complete}.
-\end{stheorem}
+\begin{claimbox}
+Cypher~25, restricted to a single
+\texttt{RETURN} with \texttt{reduce()}, list comprehensions, and
+\texttt{CASE}, \textbf{is Turing-complete}.
+\end{claimbox}
 
 \textbf{Proof strategy.} By reduction:
 $\text{TM} \xrightarrow{\text{Minsky}} \text{2CM} \xrightarrow{\text{this}} \text{Cypher}$.
@@ -138,16 +152,16 @@ function $\delta: Q \to \text{Instr}$ where each instruction is:
         decrement and goto $q_p$
 \end{itemize}
 
-\begin{sfact}[Fact (Minsky 1967)]
+\begin{factbox}[Fact (Minsky 1967)]
 For any TM~$T$, $\exists$ a 2-counter machine simulating~$T$.
-\end{sfact}
+\end{factbox}
 
 \begin{center}
 \begin{tikzpicture}[
   >=Stealth, scale=0.72, transform shape,
-  state/.style={circle, draw=neo-green, fill=neo-light-green!20,
+  state/.style={circle, draw=accent-green, fill=accent-green!15,
     thick, minimum size=0.8cm, font=\scriptsize\bfseries},
-  halt/.style={circle, draw=neo-blue, fill=neo-blue!15,
+  halt/.style={circle, draw=accent-blue, fill=accent-blue!12,
     thick, minimum size=0.8cm, font=\scriptsize\bfseries},
   every edge/.style={draw, thick, ->, >=Stealth},
   elabel/.style={font=\tiny\ttfamily, inner sep=1pt},
@@ -162,16 +176,16 @@ For any TM~$T$, $\exists$ a 2-counter machine simulating~$T$.
   \draw[->] (q2) -- node[elabel, left] {INC(B)} (q0);
   \draw[->] (q3) edge[loop right] node[elabel, right] {HALT} (q3);
 \end{tikzpicture}\\[2pt]
-{\scriptsize\color{neo-muted}Fig.\,1 --- Example 4-state program.}
+{\scriptsize Figure~1: Example 4-state program.}
 \end{center}
 
 % ═══ §3 ═══════════════════════════════════════════════════════════
-\section{Encoding in Cypher}
+\section{Encoding}
 
 \textbf{Program.} Encode $\delta$ as a list of maps:
 
-\begin{smallcode}
-\begin{lstlisting}[style=cypher-dense]
+\begin{codeblock}
+\begin{lstlisting}[style=cypher]
 LET program = [
   {state:0, op:'INC',   counter:'A', next:1},
   {state:1, op:'JZDEC', counter:'B',
@@ -180,7 +194,7 @@ LET program = [
   {state:3, op:'HALT',  counter:'',  next:3}
 ]
 \end{lstlisting}
-\end{smallcode}
+\end{codeblock}
 
 \textbf{State.} Configuration $(q, c_A, c_B)$ as map
 \texttt{\{state:0, A:0, B:0\}}. Convention: \texttt{state=-1} means halted.
@@ -192,8 +206,8 @@ Each \texttt{reduce()} iteration executes one machine step.
 The \texttt{head([v IN [e]| ...])} idiom provides let-binding
 inside \texttt{reduce()} (where \texttt{LET} is unavailable).
 
-\begin{smallcode}
-\begin{lstlisting}[style=cypher-dense]
+\begin{codeblock}
+\begin{lstlisting}[style=cypher]
 CYPHER 25
 LET program = [ /* ... */ ]
 LET max_steps = 1000000
@@ -238,17 +252,17 @@ LET result = reduce(
 )
 RETURN result
 \end{lstlisting}
-\end{smallcode}
+\end{codeblock}
 
 % ═══ §5 ═══════════════════════════════════════════════════════════
 \section{Correctness}
 
-\begin{stheorem}[Claim]
+\begin{claimbox}[Claim]
 After $k$ iterations of \texttt{reduce()}, \texttt{machine} equals
 $M$'s configuration after $k$ steps.
-\end{stheorem}
+\end{claimbox}
 
-\begin{sproof}[Proof by induction on $k$]
+\begin{proofbox}[Proof by induction on $k$]
 \textbf{Base.} $k{=}0$: \texttt{machine} $= \{0,0,0\} = M_0$.\enspace$\checkmark$
 
 \textbf{Step.} Assume $\texttt{machine} = (q_k, a_k, b_k)$ matches $M$.
@@ -263,7 +277,7 @@ $\texttt{HALT}$ & $\to (-1, ..)$, identity after \enspace$\checkmark$ \\
 \end{tabular}}
 
 \noindent Symmetric for~$B$.
-\end{sproof}
+\end{proofbox}
 
 % ═══ §6 ═══════════════════════════════════════════════════════════
 \section{The Bounded-Step Objection}
@@ -271,14 +285,13 @@ $\texttt{HALT}$ & $\to (-1, ..)$, identity after \enspace$\checkmark$ \\
 The \texttt{reduce()} uses \texttt{range(1, max\_steps)} ---
 a finite bound.
 
-\subsection{Resolution via IN TRANSACTIONS}
+\subsection{Resolution via \texttt{IN TRANSACTIONS}}
 
 While the pure functional version stays within a single expression,
 the practical unbounded version uses graph storage for state persistence.
 
-
-\begin{smallcode}
-\begin{lstlisting}[style=cypher-dense]
+\begin{codeblock}
+\begin{lstlisting}[style=cypher]
 CYPHER 25
 CREATE (:Machine {state:0, A:0, B:0});
 
@@ -313,7 +326,7 @@ CALL (step) {
 } IN TRANSACTIONS OF 1 ROW
   ON ERROR BREAK
 \end{lstlisting}
-\end{smallcode}
+\end{codeblock}
 
 \textbf{Termination.} At halt, \texttt{state} becomes $-1$.
 Next iteration: \texttt{CASE WHEN state=-1 THEN 1/0} fires
@@ -345,7 +358,7 @@ Next iteration: \texttt{CASE WHEN state=-1 THEN 1/0} fires
   \draw[->] (check) -- node[edgelabel, above] {Y} (fire);
   \draw[->] (fire)--(break);
 \end{tikzpicture}\\[1pt]
-{\scriptsize\color{neo-muted}Fig.\,2 --- Termination via \texttt{1/0} + \texttt{ON ERROR BREAK}.}
+{\scriptsize Figure~2: Termination via \texttt{1/0} + \texttt{ON ERROR BREAK}.}
 \end{center}
 
 \textbf{Note.} $2^{63} \approx 9.2 \times 10^{18}$ exceeds the lifetime
@@ -363,7 +376,7 @@ decidable language --- \textbf{universal for total functions}.
 \section{Required Primitives}
 
 {\small
-\begin{tabular}{@{}lp{3.8cm}@{}}
+\begin{tabular}{@{}lp{4.2cm}@{}}
 \toprule
 \textbf{Primitive} & \textbf{Role} \\
 \midrule
@@ -377,12 +390,13 @@ Map \texttt{\{s,A,B\}} & State repr. \\
 \end{tabular}}
 
 \smallskip
-\textbf{No graph operations. No APOC. No GDS.}
+\noindent\textbf{No graph operations. No APOC. No GDS.}
 
 % ═══ §8 ═══════════════════════════════════════════════════════════
-\section{Verified on Neo4j Aura}
+\section{Verified Execution}
 
-Both approaches tested on Aura (Neo4j 5.x, \textsc{Cypher~25}). Test program: 4 instructions, expected $\{-1, 2, 0\}$.
+Both approaches tested on Neo4j Aura (Neo4j 5.x, Cypher~25). Test program:
+4 instructions, expected $\{-1, 2, 0\}$.
 
 {\small
 \begin{tabular}{@{}clccc@{}}
@@ -398,21 +412,21 @@ Both approaches tested on Aura (Neo4j 5.x, \textsc{Cypher~25}). Test program: 4 
 \bottomrule
 \end{tabular}}
 
-\begin{sresult}[\texttt{reduce()} result]
+\begin{resultbox}[\texttt{reduce()} result]
 \texttt{\{A:2, B:0, state:-1\}} \enspace$\checkmark$
-\end{sresult}
+\end{resultbox}
 
-\begin{sresult}[\texttt{IN TRANSACTIONS} result]
+\begin{resultbox}[\texttt{IN TRANSACTIONS} result]
 \texttt{m.state=-1, m.A=2, m.B=0} \enspace$\checkmark$
-\end{sresult}
+\end{resultbox}
 
 % ═══ §9 ═══════════════════════════════════════════════════════════
 \section{Complete Runnable Queries}
 
 The following two queries are copy-paste ready for any Neo4j instance
-with \textsc{Cypher~25} support. They encode the 4-state test program
-from \S2 and can be adapted to any 2-counter machine by editing the
-\texttt{program} list.
+with Cypher~25 support. They encode the 4-state test
+program from \S2 and can be adapted to any 2-counter machine by
+editing the \texttt{program} list.
 
 \subsection{Approach 1: Pure \texttt{reduce()}}
 
@@ -422,8 +436,8 @@ inside \texttt{reduce()} (where \texttt{LET} is unavailable): it wraps
 the expression in a one-element list, the comprehension binds the
 variable, and \texttt{head()} unwraps the result.
 
-\begin{smallcode}
-\begin{lstlisting}[style=cypher-dense]
+\begin{codeblock}
+\begin{lstlisting}[style=cypher]
 CYPHER 25
 LET program = [
   {state: 0, op: 'INC',   counter: 'A',
@@ -482,7 +496,7 @@ LET result = reduce(
 )
 RETURN result
 \end{lstlisting}
-\end{smallcode}
+\end{codeblock}
 
 \subsection{Approach 2: \texttt{IN TRANSACTIONS}}
 
@@ -490,17 +504,17 @@ Uses graph storage for state persistence.
 The \texttt{1/0} guard fires \emph{before} any list indexing when
 halted, caught by \texttt{ON ERROR BREAK}.
 
-\begin{smallcode}
-\begin{lstlisting}[style=cypher-dense]
+\begin{codeblock}
+\begin{lstlisting}[style=cypher]
 CYPHER 25
 CREATE (:Machine {state: 0, A: 0, B: 0});
 \end{lstlisting}
-\end{smallcode}
+\end{codeblock}
 
 \vspace{-0.5em}
 
-\begin{smallcode}
-\begin{lstlisting}[style=cypher-dense]
+\begin{codeblock}
+\begin{lstlisting}[style=cypher]
 CYPHER 25
 LET program = [
   {state: 0, op: 'INC',   counter: 'A',
@@ -554,14 +568,14 @@ CALL (step) {
 } IN TRANSACTIONS OF 1 ROW
   ON ERROR BREAK
 \end{lstlisting}
-\end{smallcode}
+\end{codeblock}
 
-\begin{smallcode}
-\begin{lstlisting}[style=cypher-dense]
+\begin{codeblock}
+\begin{lstlisting}[style=cypher]
 // Read result:
 MATCH (m:Machine) RETURN m;
 \end{lstlisting}
-\end{smallcode}
+\end{codeblock}
 
 \subsection{Approach 3: Graph-Native QPP Traversal}
 
@@ -572,8 +586,8 @@ Each state is a node; each transition is a relationship.
 \texttt{JZDEC\_POS}); the predicate in \texttt{allReduce} prunes
 the invalid branch at traversal time.
 
-\begin{smallcode}
-\begin{lstlisting}[style=cypher-dense]
+\begin{codeblock}
+\begin{lstlisting}[style=cypher]
 CYPHER 25
 // Build the machine as a graph
 CREATE (q0:State:Init {id: 0})
@@ -585,12 +599,12 @@ CREATE (q1)-[:JZDEC_ZERO {c:'B'}]->(q2)
 CREATE (q1)-[:JZDEC_POS  {c:'B'}]->(q3)
 CREATE (q2)-[:INC        {c:'B'}]->(q0)
 \end{lstlisting}
-\end{smallcode}
+\end{codeblock}
 
 \vspace{-0.5em}
 
-\begin{smallcode}
-\begin{lstlisting}[style=cypher-dense]
+\begin{codeblock}
+\begin{lstlisting}[style=cypher]
 CYPHER 25
 // Traverse: allReduce prunes, NEXT extracts
 MATCH REPEATABLE ELEMENTS
@@ -642,7 +656,7 @@ RETURN length(p) AS steps,
     END
   ) AS result
 \end{lstlisting}
-\end{smallcode}
+\end{codeblock}
 
 \textbf{Key properties:}
 \begin{itemize}[leftmargin=1.2em,nosep]
@@ -658,24 +672,40 @@ RETURN length(p) AS steps,
 \end{itemize}
 
 % ═══ REFERENCES ═══════════════════════════════════════════════════
+\bibliographystyle{ACM-Reference-Format}
 \begin{thebibliography}{9}
-\small
 
 \bibitem{minsky1967}
-Minsky, M.\,L.\ (1967). \emph{Computation: Finite and Infinite Machines}. Prentice-Hall.
+Minsky, M.\,L.\ 1967.
+\emph{Computation: Finite and Infinite Machines}.
+Prentice-Hall.
+
+\bibitem{opencypher}
+openCypher. 2024.
+Cypher Query Language Reference.
+\url{https://opencypher.org}
+
+\bibitem{gql2024}
+ISO/IEC 39075:2024.
+\emph{Information technology --- Database languages --- GQL}.
+International Organization for Standardization.
 
 \bibitem{neo4jdocs}
-Neo4j: \href{https://neo4j.com/docs/cypher-manual/current/}{Cypher Manual}.
+Neo4j. 2025.
+\emph{Cypher Manual}.
+\url{https://neo4j.com/docs/cypher-manual/current/}
 
 \bibitem{evblog}
-Halftermeyer, P.\ (2025). Declarative Route Planning for EVs
-With Neo4j --- Graph Traversal Grows Up.
-\href{https://neo4j.com/blog/developer/declarative-route-planning-with-cypher-25/}{Neo4j Developer Blog}.
+Halftermeyer, P. 2025.
+Declarative Route Planning for EVs With Neo4j ---
+Graph Traversal Grows Up.
+\url{https://neo4j.com/blog/developer/declarative-route-planning-with-cypher-25/}
 
 \bibitem{aoc}
-Halftermeyer, P.\ (2015--2025). Advent of Code in Pure Cypher ---
+Halftermeyer, P. 2015--2025.
+Advent of Code in Pure Cypher ---
 150+ puzzles solved purely in Cypher, empirical evidence of expressiveness.
-\href{https://github.com/halftermeyer/adventofcode}{github.com/halftermeyer/adventofcode}
+\url{https://github.com/halftermeyer/adventofcode}
 
 \end{thebibliography}
 
