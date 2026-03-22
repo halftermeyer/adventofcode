@@ -400,12 +400,10 @@ will terminate.
 (By Rice's theorem applied to the reduction from 2CM.)
 \end{factbox}
 
-\begin{factbox}[Corollary 2: Practical implications]
-The language can compute any computable function: game-tree search via
-nested \texttt{reduce()} with alpha-beta pruning, Gaussian
-elimination via list-of-lists, genetic algorithms via iterated
-\texttt{reduce()} over populations, and any algorithm expressible
-as a fold.
+\begin{factbox}[Corollary 2: Universality]
+The language can compute any computable function.
+Any algorithm expressible as a Turing machine has an equivalent
+\texttt{reduce()}-based query.
 \end{factbox}
 
 \begin{factbox}[Corollary 3: Beyond computability]
