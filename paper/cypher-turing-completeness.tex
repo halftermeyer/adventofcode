@@ -532,7 +532,7 @@ CYPHER 25
 MATCH REPEATABLE ELEMENTS
   p = (init:Init)
     -[rels:INC|JZDEC_ZERO|JZDEC_POS]->
-      {1, 9223372036854775807}
+      {0, 9223372036854775807}
     (h:Halt)
 WHERE allReduce(
   m = {A: 0, B: 0}, r IN rels |
