@@ -40,8 +40,11 @@ Turing-complete. The proof proceeds by showing that a single
 expressions, and list comprehensions can simulate any 2-counter machine
 (Minsky machine). Since 2-counter machines are known to be
 Turing-complete, the result follows by reduction. We address the
-bounded-step objection via two complementary resolutions and verify the
-construction by executing the simulation on a live Neo4j Aura instance.
+bounded-step objection via three complementary resolutions --- including
+a graph-native approach using quantified path patterns (QPP) with
+\texttt{allReduce}, where the machine \emph{is} the graph and
+computation \emph{is} path finding --- and verify all three constructions
+on a live Neo4j Aura instance.
 \end{abstract}
 
 \newpage
@@ -374,6 +377,7 @@ The \texttt{reduce()} proof uses \texttt{range(1, max\_steps)} --- a
 \midrule
 \S6.1 & \texttt{IN TRANSACTIONS} & Loop up to $2^{63}$ steps --- practically unbounded \\
 \S6.2 & Sufficiency argument & Set bound = halting time --- universal for total functions \\
+\S6.3 & QPP + \texttt{allReduce} & Machine \emph{is} graph; computation \emph{is} path finding \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -495,6 +499,106 @@ This shows Cypher is \textbf{computationally universal for total
 functions}. The gap with full Turing-completeness concerns only
 non-halting computations (addressed by \S6.1).
 
+\subsection{Resolution via Graph-Native QPP Traversal}
+
+The most idiomatic approach: model the machine \emph{as a graph}
+and let pattern matching \emph{be} the computation.
+
+\textbf{Idea.} Encode each state $q_i$ as a node and each instruction as
+a typed relationship (\texttt{:INC}, \texttt{:JZDEC\_ZERO},
+\texttt{:JZDEC\_POS}). A valid execution trace is a path from
+\texttt{:Init} to \texttt{:Halt}. The \texttt{allReduce} predicate
+prunes invalid branches eagerly during traversal.
+
+\begin{codeblock}
+\begin{lstlisting}
+CYPHER 25
+// Build the machine graph
+CREATE (q0:State:Init {name: 'q0'})
+CREATE (q1:State      {name: 'q1'})
+CREATE (q2:State      {name: 'q2'})
+CREATE (q3:State:Halt {name: 'q3'})
+CREATE (q0)-[:INC        {c:'A'}]->(q1)
+CREATE (q1)-[:JZDEC_ZERO {c:'B'}]->(q2)
+CREATE (q1)-[:JZDEC_POS  {c:'B'}]->(q3)
+CREATE (q2)-[:INC        {c:'B'}]->(q0)
+\end{lstlisting}
+\end{codeblock}
+
+\begin{codeblock}
+\begin{lstlisting}
+CYPHER 25
+// Traverse: allReduce prunes, NEXT extracts
+MATCH REPEATABLE ELEMENTS
+  p = (init:Init)
+    -[rels:INC|JZDEC_ZERO|JZDEC_POS]->
+      {1, 9223372036854775807}
+    (h:Halt)
+WHERE allReduce(
+  m = {A: 0, B: 0}, r IN rels |
+  CASE
+    WHEN r:INC AND r.c = 'A'
+      THEN {A: m.A+1, B: m.B}
+    WHEN r:INC AND r.c = 'B'
+      THEN {A: m.A, B: m.B+1}
+    WHEN r:JZDEC_POS AND r.c = 'A'
+      THEN {A: m.A-1, B: m.B}
+    WHEN r:JZDEC_POS AND r.c = 'B'
+      THEN {A: m.A, B: m.B-1}
+    ELSE m
+  END,
+  CASE
+    WHEN r:JZDEC_ZERO AND r.c = 'A'
+      THEN m.A = 0
+    WHEN r:JZDEC_ZERO AND r.c = 'B'
+      THEN m.B = 0
+    WHEN r:JZDEC_POS AND r.c = 'A'
+      THEN m.A >= 0
+    WHEN r:JZDEC_POS AND r.c = 'B'
+      THEN m.B >= 0
+    ELSE true
+  END
+)
+RETURN rels, length(p) AS steps
+NEXT
+// Re-derive counters from the valid path
+LET final = reduce(m = {A:0, B:0},
+    r IN rels |
+    CASE
+      WHEN r:INC AND r.c = 'A'
+        THEN {A: m.A+1, B: m.B}
+      WHEN r:INC AND r.c = 'B'
+        THEN {A: m.A, B: m.B+1}
+      WHEN r:JZDEC_POS AND r.c = 'A'
+        THEN {A: m.A-1, B: m.B}
+      WHEN r:JZDEC_POS AND r.c = 'B'
+        THEN {A: m.A, B: m.B-1}
+      ELSE m
+    END
+  )
+RETURN steps, final.A AS ctrA, final.B AS ctrB
+\end{lstlisting}
+\end{codeblock}
+
+\textbf{Key properties:}
+\begin{itemize}[leftmargin=1.5em]
+  \item The machine \emph{is} the graph; computation \emph{is} path finding.
+  \item \texttt{REPEATABLE ELEMENTS} allows revisiting states (loops).
+  \item \texttt{allReduce} prunes eagerly: once a \texttt{JZDEC}
+        branch fails the predicate, that path is abandoned immediately.
+  \item No HALT self-loop needed --- reaching a \texttt{:Halt} node
+        terminates the pattern.
+  \item \texttt{reduce()} in the \texttt{NEXT} stage re-derives
+        final counter values from the surviving path
+        (same pattern as~\cite{evblog}).
+\end{itemize}
+
+\textbf{Subtlety: post-update predicate.}
+The \texttt{allReduce} predicate is evaluated on the \emph{post-update}
+accumulator. For \texttt{JZDEC\_POS}, the update decrements the counter
+first, then the predicate checks $\geq 0$ (not $> 0$). This ensures
+that decrementing from~$1$ to~$0$ is accepted.
+
 
 % ═══════════════════════════════════════════════════════════════════
 % §7 REQUIRED PRIMITIVES
@@ -525,7 +629,37 @@ Pure Cypher expressions suffice.
 
 
 % ═══════════════════════════════════════════════════════════════════
-% §8 VERIFIED EXECUTION
+% §8 COROLLARIES
+% ═══════════════════════════════════════════════════════════════════
+\section{Corollaries}
+
+\begin{factbox}[Corollary 1: Undecidability of termination]
+Since \textsc{Cypher~25} can simulate any 2-counter machine, it is
+\emph{undecidable} whether a given \texttt{reduce()} expression
+will terminate.
+(By Rice's theorem applied to the reduction from 2CM.)
+\end{factbox}
+
+\begin{factbox}[Corollary 2: Universality]
+\textsc{Cypher~25} can compute any computable function.
+Any algorithm expressible as a Turing machine has an equivalent
+\texttt{reduce()}-based Cypher query.
+\end{factbox}
+
+\begin{factbox}[Corollary 3: Beyond computability]
+While \texttt{reduce()} makes Cypher Turing-complete for
+\emph{computation}, graph pattern matching with QPP and
+\texttt{allReduce} provides \emph{declarative constrained
+traversal} with per-step pruning --- something most
+Turing-complete languages lack. This is not about computability
+(all TC languages are equivalent) but about \textbf{expressiveness}:
+some problems are more naturally expressed as graph patterns than
+as imperative loops.
+\end{factbox}
+
+
+% ═══════════════════════════════════════════════════════════════════
+% §9 VERIFIED EXECUTION
 % ═══════════════════════════════════════════════════════════════════
 \section{Verified Execution on Neo4j Aura}
 
@@ -564,8 +698,12 @@ The 4-instruction program from \S3.1:
 \texttt{m.state = -1, m.A = 2, m.B = 0} \quad$\checkmark$
 \end{resultbox}
 
-Both approaches produce the expected result, matching the manual trace
-step-for-step.
+\begin{resultbox}[Result: QPP \texttt{allReduce} traversal]
+\texttt{steps = 5, ctrA = 2, ctrB = 0} \quad$\checkmark$
+\end{resultbox}
+
+All three approaches produce the expected result, matching the manual
+trace step-for-step.
 
 
 % ═══════════════════════════════════════════════════════════════════
@@ -585,8 +723,13 @@ Neo4j Documentation:
 
 \bibitem{aoc}
 Advent of Code Cypher Solutions (2015--2025) ---
-150+ solved algorithmic problems.
-\href{https://github.com/halftermeyer}{github.com/halftermeyer}
+300+ solved algorithmic problems.
+\href{https://github.com/halftermeyer/adventofcode}{github.com/halftermeyer/adventofcode}
+
+\bibitem{evblog}
+Halftermeyer, P.\ (2025).
+EV Road Trip Planning with Neo4j --- QPP and \texttt{allReduce}.
+Neo4j Developer Blog.
 
 \end{thebibliography}
 
