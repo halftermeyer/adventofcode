@@ -1,0 +1,38 @@
+name,description,query,id,parentId,isFolder
+day01,,,0,1,true
+ingest,,"LOAD CSV FROM ""file:///day01/input.txt"" AS line// FIELDTERMINATOR '\n'
+WITH line[0] AS line
+WITH line, apoc.text.split(line, '') AS chars
+WITH line, chars
+UNWIND chars AS c
+CREATE (charNode:Char {line:line, char:c})
+WITH line, collect(charNode) AS nodes
+CALL apoc.nodes.link(nodes, ""NEXT"")",2,0,false
+label digit,,"MATCH (n:Char WHERE ""0123456789"" CONTAINS n.char)
+SET n:Digit",3,0,false
+part 1,,"MATCH (first:Char WHERE NOT EXISTS {()-[:NEXT]->(first)})
+MATCH (first)
+    ((:Char&!Digit)-[:NEXT]->())*
+    (first_digit:Digit)-[:NEXT]->*(last_digit:Digit)
+    (()-[:NEXT]->(:Char&!Digit))*
+    (last:Char WHERE NOT EXISTS {(last)-[:NEXT]->()})
+RETURN sum(toInteger(first_digit.char + last_digit.char)) AS part1",4,0,false
+alternative digits,,"WITH [[""one"",""1""],[""two"",""2""],[""three"",""3""],[""four"",""4""],[""five"",""5""],[""six"",""6""],[""seven"",""7""],[""eight"",""8""],
+[""nine"",""9""]] AS digits
+UNWIND digits AS digit
+MATCH (first)(()-[:NEXT]->(others))*(last)
+WHERE apoc.text.join([x IN [first]+others | x.char],'') = digit[0]
+CREATE (alt:Char:Digit {char:digit[1]})
+CREATE (first)-[:NEXT]->(alt)-[:NEXT]->(last)",5,0,false
+project GDS graph,,"MATCH (n:Char)
+OPTIONAL MATCH (n)-[:NEXT]->(target)
+WITH gds.graph.project(""g"", n, target, {}) AS g
+RETURN g",6,0,false
+WCC write,,"CALL gds.wcc.write('g', { writeProperty: 'componentId' })
+YIELD nodePropertiesWritten, componentCount;",7,0,false
+part 2,,"CALL gds.dag.topologicalSort.stream(""g"")
+YIELD nodeId
+WITH gds.util.asNode(nodeId).char AS char, gds.util.asNode(nodeId).componentId AS comp
+WHERE ""1234567890"" CONTAINS char
+WITH comp, collect(char) AS chars
+WITH sum(toInteger(chars[0]+chars[-1])) AS calibration",8,0,false

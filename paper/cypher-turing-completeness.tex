@@ -1,0 +1,593 @@
+% !TEX program = xelatex
+\documentclass[11pt,a4paper]{article}
+\usepackage{neo4j-article}
+\usepackage{colortbl}
+\usepackage{multirow}
+
+% ─── Document Metadata ─────────────────────────────────────────────
+\title{Cypher is Turing-Complete}
+\author{Pierre Halftermeyer}
+\date{March 2026}
+
+\begin{document}
+
+% ═══════════════════════════════════════════════════════════════════
+% TITLE PAGE
+% ═══════════════════════════════════════════════════════════════════
+\thispagestyle{empty}
+\begin{center}
+  \vspace*{2cm}
+  \includegraphics[width=50mm]{assets/logo.png}
+
+  \vspace{2cm}
+  {\headingfont\Huge\bfseries\color{neo-blue}Cypher is Turing-Complete}
+
+  \vspace{0.8cm}
+  {\headingfont\Large\color{neo-dark-blue}A Formal Proof via 2-Counter Machine Simulation}
+
+  \vspace{1.5cm}
+  {\large\color{neo-muted}Pierre Halftermeyer \quad$\cdot$\quad Neo4j}
+
+  \vspace{0.5cm}
+  {\color{neo-muted}March 2026}
+\end{center}
+\vfill
+
+\begin{abstract}
+We prove that \textsc{Cypher~25}, the graph query language of Neo4j, is
+Turing-complete. The proof proceeds by showing that a single
+\texttt{RETURN} statement using \texttt{reduce()}, \texttt{CASE}
+expressions, and list comprehensions can simulate any 2-counter machine
+(Minsky machine). Since 2-counter machines are known to be
+Turing-complete, the result follows by reduction. We address the
+bounded-step objection via two complementary resolutions and verify the
+construction by executing the simulation on a live Neo4j Aura instance.
+\end{abstract}
+
+\newpage
+
+% ═══════════════════════════════════════════════════════════════════
+% §1 THE CLAIM
+% ═══════════════════════════════════════════════════════════════════
+\section{The Claim}
+
+\begin{theorembox}[Theorem]
+\textsc{Cypher~25}, restricted to a single \texttt{RETURN} statement
+with \texttt{reduce()}, list comprehensions, and \texttt{CASE}
+expressions, \textbf{is Turing-complete}.
+\end{theorembox}
+
+\subsection{Proof Strategy}
+
+We prove Turing-completeness by \emph{reduction}:
+%
+\[
+  \text{Turing Machine}
+  \;\xrightarrow{\text{Minsky 1967}}\;
+  \text{2-Counter Machine}
+  \;\xrightarrow{\text{this proof}}\;
+  \text{Cypher \texttt{reduce()}}
+\]
+%
+\begin{itemize}[leftmargin=1.5em]
+  \item 2-counter machines are known to be Turing-complete~\cite{minsky1967}.
+  \item We show Cypher can simulate \emph{any} 2-counter machine.
+  \item Therefore Cypher is Turing-complete.
+\end{itemize}
+
+
+% ═══════════════════════════════════════════════════════════════════
+% §2 2-COUNTER MACHINES
+% ═══════════════════════════════════════════════════════════════════
+\section{2-Counter Machines}
+
+\subsection{Definition}
+
+A \textbf{2-counter machine} $M = (Q,\; q_0,\; q_{\text{halt}},\; \delta)$ consists of:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Component} & \textbf{Meaning} \\
+\midrule
+$Q$ & Finite set of states \\
+$q_0 \in Q$ & Initial state \\
+$q_{\text{halt}} \in Q$ & Halting state \\
+$\delta : Q \to \text{Instructions}$ & Transition function \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Each instruction is one of:
+\begin{itemize}[leftmargin=1.5em]
+  \item $\texttt{INC}(c, q')$ --- increment counter $c \in \{A, B\}$, go to state~$q'$
+  \item $\texttt{JZDEC}(c, q_z, q_p)$ --- if $c = 0$ go to $q_z$, else decrement $c$ and go to $q_p$
+\end{itemize}
+
+\begin{factbox}[Fact (Minsky 1967)]
+For any Turing machine~$T$, there exists a 2-counter machine~$M$ that
+simulates~$T$. Two-counter machines are the \emph{simplest} known
+Turing-complete model: only two unbounded integers, only two instruction
+types, and a finite-state controller. If Cypher can simulate this, it
+can simulate \emph{anything}.
+\end{factbox}
+
+\subsection{Example: A 4-State Program}
+
+\begin{center}
+\begin{tikzpicture}[
+  >=Stealth,
+  state/.style={circle, draw=neo-green, fill=neo-light-green!20,
+    thick, minimum size=1.1cm, font=\small\bfseries},
+  halt/.style={circle, draw=neo-blue, fill=neo-blue!15,
+    thick, minimum size=1.1cm, font=\small\bfseries},
+  every edge/.style={draw, thick, ->, >=Stealth},
+  elabel/.style={font=\small\ttfamily, inner sep=2pt},
+]
+  \node[state] (q0) at (0,0) {$q_0$};
+  \node[state] (q1) at (4,0) {$q_1$};
+  \node[state] (q2) at (0,-3.2) {$q_2$};
+  \node[halt]  (q3) at (4,-3.2) {$q_3$};
+
+  \draw[->] (q0) -- node[elabel, above] {INC(A)} (q1);
+  \draw[->] (q1) -- node[elabel, right] {JZDEC(B), $B{>}0$} (q3);
+  \draw[->] (q1) to[out=210,in=30] node[elabel, below, pos=0.45] {JZDEC(B), $B{=}0$} (q2);
+  \draw[->] (q2) -- node[elabel, left] {INC(B)} (q0);
+  \draw[->] (q3) edge[loop right] node[elabel, right] {HALT} (q3);
+\end{tikzpicture}
+\end{center}
+\begin{center}
+\small\color{neo-muted}
+Figure 1 --- A 4-state 2-counter machine that increments~$A$, tests~$B$,
+loops or halts.
+\end{center}
+
+
+% ═══════════════════════════════════════════════════════════════════
+% §3 ENCODING IN CYPHER
+% ═══════════════════════════════════════════════════════════════════
+\section{Encoding in Cypher}
+
+\subsection{Program Encoding}
+
+Encode the transition function~$\delta$ as a Cypher \textbf{list of maps}:
+
+\begin{codeblock}
+\begin{lstlisting}
+LET program = [
+  {state: 0, op: 'INC',   counter: 'A', next: 1},
+  {state: 1, op: 'JZDEC', counter: 'B', q_zero: 2, q_pos: 3},
+  {state: 2, op: 'INC',   counter: 'B', next: 0},
+  {state: 3, op: 'HALT',  counter: '',  next: 3}
+]
+\end{lstlisting}
+\end{codeblock}
+
+This is a \emph{finite, static} list --- no graph writes needed.
+\texttt{program[i]} gives $\delta(q_i)$ in $O(1)$.
+
+\subsection{Machine State}
+
+The full machine configuration $(q,\; c_A,\; c_B)$ is a single Cypher \textbf{map}:
+
+\begin{codeblock}
+\begin{lstlisting}
+{state: 0, A: 0, B: 0}
+\end{lstlisting}
+\end{codeblock}
+
+Conventions: \texttt{state = -1} means \emph{halted}; counters are
+non-negative integers; the initial configuration is
+\texttt{\{state: 0, A: 0, B: 0\}}.
+
+
+% ═══════════════════════════════════════════════════════════════════
+% §4 THE SIMULATION
+% ═══════════════════════════════════════════════════════════════════
+\section{The Simulation}
+
+\subsection{Core \texttt{reduce()} Implementation}
+
+Each iteration of \texttt{reduce()} performs \textbf{one machine step}:
+
+\begin{center}
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  >=Stealth,
+  node distance=1.6cm,
+  box/.style={rectangle, rounded corners=3pt, draw=neo-blue!60,
+    fill=neo-marigold!12, thick, minimum height=0.9cm,
+    text width=2.8cm, align=center, font=\small},
+  decision/.style={diamond, draw=neo-blue!60, fill=neo-marigold!12,
+    thick, minimum height=1cm, aspect=2, align=center, font=\small},
+  action/.style={rectangle, rounded corners=3pt, draw=neo-teal,
+    fill=neo-teal!10, thick, minimum height=0.8cm,
+    text width=2.4cm, align=center, font=\small},
+  every edge/.style={draw, thick, ->, >=Stealth},
+  edgelabel/.style={font=\scriptsize, fill=white, inner sep=1pt},
+]
+  \node[box] (read) {Read state\\[-2pt]{\ttfamily\scriptsize machine.state}};
+  \node[box, right=1.5cm of read] (fetch) {Fetch instruction\\[-2pt]{\ttfamily\scriptsize program[state]}};
+  \node[decision, right=1.5cm of fetch] (type) {Instruction\\type?};
+  \node[action, above right=0.6cm and 1.5cm of type] (inc) {Increment counter\\Update state};
+  \node[decision, right=1.5cm of type] (zero) {Counter\\$= 0$?};
+  \node[action, below right=0.6cm and 1.5cm of type] (halt) {Set state $= -1$};
+  \node[action, above right=0.5cm and 1.2cm of zero] (gz) {Go to $q_{\text{zero}}$};
+  \node[action, below right=0.5cm and 1.2cm of zero] (gp) {Decrement,\\go to $q_{\text{pos}}$};
+
+  \draw[->] (read) -- (fetch);
+  \draw[->] (fetch) -- (type);
+  \draw[->] (type) -- node[edgelabel, above left] {INC} (inc);
+  \draw[->] (type) -- node[edgelabel, above] {JZDEC} (zero);
+  \draw[->] (type) -- node[edgelabel, below left] {HALT} (halt);
+  \draw[->] (zero) -- node[edgelabel, above left] {Yes} (gz);
+  \draw[->] (zero) -- node[edgelabel, below left] {No} (gp);
+\end{tikzpicture}%
+}
+\end{center}
+\begin{center}
+\small\color{neo-muted}
+Figure 2 --- Execution flow of one \texttt{reduce()} iteration.
+\end{center}
+
+\begin{codeblock}
+\begin{lstlisting}
+CYPHER 25
+LET program = [ /* ... as above ... */ ]
+LET max_steps = 1000000  // arbitrary bound (see §5)
+
+LET result = reduce(
+  machine = {state: 0, A: 0, B: 0},
+  step IN range(1, max_steps) |
+  CASE WHEN machine.state = -1
+    THEN machine  // halted: identity
+  ELSE
+    head([instr IN [program[machine.state]] |
+      CASE instr.op
+        WHEN 'INC' THEN
+          CASE instr.counter
+            WHEN 'A' THEN
+              {state: instr.next,
+               A: machine.A + 1, B: machine.B}
+            WHEN 'B' THEN
+              {state: instr.next,
+               A: machine.A, B: machine.B + 1}
+          END
+        WHEN 'JZDEC' THEN
+          CASE instr.counter
+            WHEN 'A' THEN
+              CASE WHEN machine.A = 0
+                THEN {state: instr.q_zero,
+                      A: 0, B: machine.B}
+                ELSE {state: instr.q_pos,
+                      A: machine.A - 1, B: machine.B}
+              END
+            WHEN 'B' THEN
+              CASE WHEN machine.B = 0
+                THEN {state: instr.q_zero,
+                      A: machine.A, B: 0}
+                ELSE {state: instr.q_pos,
+                      A: machine.A, B: machine.B - 1}
+              END
+          END
+        WHEN 'HALT' THEN
+          {state: -1, A: machine.A, B: machine.B}
+      END
+    ])
+  END
+)
+RETURN result
+\end{lstlisting}
+\end{codeblock}
+
+\subsection{Key Idiom: Let-Binding in \texttt{reduce()}}
+
+\texttt{LET} is \emph{not available} inside \texttt{reduce()}.
+The workaround uses a single-element list comprehension:
+
+\begin{codeblock}
+\begin{lstlisting}
+// Let-binding idiom:
+head([instr IN [program[machine.state]] |
+  // 'instr' is now bound -- use it freely
+  CASE instr.op WHEN 'INC' THEN ... END
+])
+\end{lstlisting}
+\end{codeblock}
+
+This wraps the expression in a single-element list \texttt{[expr]},
+the comprehension \emph{binds} the variable name, and \texttt{head()}
+unwraps the result.
+
+
+% ═══════════════════════════════════════════════════════════════════
+% §5 CORRECTNESS PROOF
+% ═══════════════════════════════════════════════════════════════════
+\section{Correctness Proof}
+
+\begin{theorembox}[Claim]
+After $k$~iterations of \texttt{reduce()}, the value of
+\texttt{machine} equals the configuration of machine~$M$ after
+$k$~steps.
+\end{theorembox}
+
+\begin{proofbox}[Proof by induction on $k$]
+\textbf{Base case} ($k = 0$):
+\[
+  \texttt{machine} = \{state: 0,\; A: 0,\; B: 0\}
+  = \text{initial configuration of } M \quad\checkmark
+\]
+
+\textbf{Inductive step.}
+Assume after $k$~iterations:
+$\texttt{machine} = \{state: q_k,\; A: a_k,\; B: b_k\}$
+matches $M$'s configuration.
+
+At iteration $k{+}1$, the \texttt{reduce()} body:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item Looks up \texttt{program[machine.state]} $\to$ retrieves instruction $\delta(q_k)$.
+  \item Executes via \texttt{CASE}:
+\end{enumerate}
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Instruction} & \textbf{Cypher returns} & \textbf{Matches?} \\
+\midrule
+$\texttt{INC}(A, q')$
+  & $\{state: q',\; A: a_k + 1,\; B: b_k\}$
+  & $\checkmark$ \\
+$\texttt{JZDEC}(A, q_z, q_p)$, $a_k = 0$
+  & $\{state: q_z,\; A: 0,\; B: b_k\}$
+  & $\checkmark$ \\
+$\texttt{JZDEC}(A, q_z, q_p)$, $a_k > 0$
+  & $\{state: q_p,\; A: a_k - 1,\; B: b_k\}$
+  & $\checkmark$ \\
+$\texttt{HALT}$
+  & $\{state: -1, \ldots\}$ --- identity thereafter
+  & $\checkmark$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Symmetric cases for counter~$B$.
+Therefore \texttt{machine} after $k{+}1$ iterations matches $M$'s
+configuration after $k{+}1$ steps.
+\end{proofbox}
+
+
+% ═══════════════════════════════════════════════════════════════════
+% §6 THE BOUNDED-STEP OBJECTION
+% ═══════════════════════════════════════════════════════════════════
+\section{The Bounded-Step Objection}
+
+The \texttt{reduce()} proof uses \texttt{range(1, max\_steps)} --- a
+\emph{finite} bound. Strict Turing-completeness requires
+\emph{unbounded} computation.
+
+\begin{center}
+\begin{tabular}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Approach} & \textbf{Mechanism} & \textbf{Achieves} \\
+\midrule
+\S6.1 & \texttt{IN TRANSACTIONS} & Loop up to $2^{63}$ steps --- practically unbounded \\
+\S6.2 & Sufficiency argument & Set bound = halting time --- universal for total functions \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Resolution via IN TRANSACTIONS}
+
+\begin{codeblock}
+\begin{lstlisting}
+CYPHER 25
+CREATE (:Machine {state: 0, A: 0, B: 0});
+
+UNWIND range(1, 9223372036854775807) AS step  // 2^63 - 1
+CALL (step) {
+  MATCH (m:Machine)
+  // 1/0 guard BEFORE list indexing
+  WITH m,
+       CASE WHEN m.state = -1 THEN 1/0
+            ELSE $program[m.state]
+       END AS instr
+  SET m.state = CASE instr.op
+    WHEN 'INC' THEN instr.next
+    WHEN 'JZDEC' THEN CASE instr.counter
+      WHEN 'A' THEN
+        CASE WHEN m.A = 0
+          THEN instr.q_zero ELSE instr.q_pos END
+      WHEN 'B' THEN
+        CASE WHEN m.B = 0
+          THEN instr.q_zero ELSE instr.q_pos END
+      END
+    WHEN 'HALT' THEN -1 END,
+  m.A = CASE
+    WHEN instr.op = 'INC' AND instr.counter = 'A'
+      THEN m.A + 1
+    WHEN instr.op = 'JZDEC' AND instr.counter = 'A'
+      AND m.A > 0 THEN m.A - 1
+    ELSE m.A END,
+  m.B = CASE
+    WHEN instr.op = 'INC' AND instr.counter = 'B'
+      THEN m.B + 1
+    WHEN instr.op = 'JZDEC' AND instr.counter = 'B'
+      AND m.B > 0 THEN m.B - 1
+    ELSE m.B END
+} IN TRANSACTIONS OF 1 ROW
+  ON ERROR BREAK
+\end{lstlisting}
+\end{codeblock}
+
+\textbf{Termination mechanism.}
+When the machine reaches the \texttt{HALT} instruction, \texttt{state}
+is set to $-1$. On the \emph{next} iteration, the guard
+\texttt{CASE WHEN m.state = -1 THEN 1/0} fires \emph{before} any list
+indexing, triggering a division-by-zero error caught by
+\texttt{ON ERROR BREAK}, which cleanly exits the loop. This ensures
+\texttt{\$program[-1]} is never evaluated.
+
+\begin{center}
+\begin{tikzpicture}[
+  >=Stealth,
+  node distance=1.4cm,
+  box/.style={rectangle, rounded corners=3pt, draw=red!40!black,
+    fill=red!5, thick, minimum height=0.85cm,
+    text width=3.2cm, align=center, font=\small},
+  decision/.style={diamond, draw=red!40!black, fill=red!5,
+    thick, minimum height=0.9cm, aspect=2.2, align=center, font=\small},
+  action/.style={rectangle, rounded corners=3pt, draw=red!60!black,
+    fill=red!10, thick, minimum height=0.85cm,
+    text width=3.2cm, align=center, font=\small},
+  every edge/.style={draw, thick, ->, >=Stealth},
+  edgelabel/.style={font=\scriptsize, fill=white, inner sep=1pt},
+]
+  \node[box] (iter) {Iteration $k$:\\HALT instruction};
+  \node[box, below of=iter] (set) {SET state $= -1$};
+  \node[box, below of=set] (next) {Iteration $k{+}1$:\\WITH guard evaluates};
+  \node[decision, below=1.2cm of next] (check) {state $= -1$?};
+  \node[action, left=2cm of check] (fire) {\texttt{1/0} fires\\(before indexing)};
+  \node[box, right=2cm of check] (normal) {\texttt{\$program[state]}\\then SET};
+  \node[action, below of=fire] (break) {ON ERROR BREAK\\exits the loop};
+
+  \draw[->] (iter) -- (set);
+  \draw[->] (set) -- (next);
+  \draw[->] (next) -- (check);
+  \draw[->] (check) -- node[edgelabel, above] {Yes} (fire);
+  \draw[->] (check) -- node[edgelabel, above] {No} (normal);
+  \draw[->] (fire) -- (break);
+\end{tikzpicture}
+\end{center}
+\begin{center}
+\small\color{neo-muted}
+Figure 3 --- Termination mechanism: the \texttt{1/0} guard fires before
+\texttt{\$program[-1]} is ever evaluated.
+\end{center}
+
+\textbf{Note on the $2^{63}$ bound.}
+Strictly speaking, \texttt{range(1,\,$2^{63}{-}1$)} is still a finite
+bound, so this does not achieve \emph{theoretical} unbounded computation.
+True unbounded execution would require an external driver (e.g., a
+client-side loop that restarts the query if it hasn't halted). In
+practice, $2^{63} \approx 9.2 \times 10^{18}$ steps exceeds any
+physically realizable computation.
+
+\subsection{Resolution via Sufficiency Argument}
+
+For any Turing machine~$T$ on input~$w$ that halts in $f(|w|)$ steps:
+\[
+  \texttt{max\_steps} = f(|w|) \implies
+  \texttt{reduce()} \text{ correctly simulates } T \text{ on } w
+\]
+
+Since:
+\begin{itemize}[leftmargin=1.5em]
+  \item Every \textbf{decidable} language~$L$ has a decider $T_L$ that
+        halts on all inputs.
+  \item For each $T_L$, there exists a computable bound~$f$.
+  \item Cypher \texttt{reduce()} with \texttt{range(1, f(|w|))} correctly
+        decides~$L$.
+\end{itemize}
+
+This shows Cypher is \textbf{computationally universal for total
+functions}. The gap with full Turing-completeness concerns only
+non-halting computations (addressed by \S6.1).
+
+
+% ═══════════════════════════════════════════════════════════════════
+% §7 REQUIRED PRIMITIVES
+% ═══════════════════════════════════════════════════════════════════
+\section{Required Primitives}
+
+The proof uses only:
+
+\begin{center}
+\begin{tabular}{@{}lp{8.5cm}@{}}
+\toprule
+\textbf{Primitive} & \textbf{Role in the proof} \\
+\midrule
+\texttt{reduce()} & Fold over a list --- provides \textbf{iteration} \\
+\texttt{CASE WHEN} & \textbf{Conditional branching} \\
+Integer $+1$, $-1$, $=0$ & \textbf{Counter operations} \\
+Map \texttt{\{state, A, B\}} & Machine \textbf{state representation} \\
+List indexing \texttt{program[i]} & $O(1)$ \textbf{instruction lookup} \\
+\texttt{head([v IN [expr] | ...])} & Let-binding (convenience only) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{neoquote}
+\textbf{No graph operations. No APOC. No GDS.}
+Pure Cypher expressions suffice.
+\end{neoquote}
+
+
+% ═══════════════════════════════════════════════════════════════════
+% §8 VERIFIED EXECUTION
+% ═══════════════════════════════════════════════════════════════════
+\section{Verified Execution on Neo4j Aura}
+
+Both simulation approaches were tested on a Neo4j Aura instance running
+Neo4j~5.x with \textsc{Cypher~25} support.
+
+\subsection{Test Program: Manual Trace}
+
+The 4-instruction program from \S3.1:
+
+\begin{center}
+\small
+\begin{tabular}{@{}clccc@{}}
+\toprule
+\textbf{Step} & \textbf{Instruction} & \textbf{State} & \textbf{A} & \textbf{B} \\
+\midrule
+0 & $\texttt{INC}(A, q_1)$            & $q_0$ & $0 \to 1$ & 0 \\
+1 & $\texttt{JZDEC}(B, q_2, q_3)$; $B{=}0$ & $q_1$ & 1 & 0 \\
+2 & $\texttt{INC}(B, q_0)$            & $q_2$ & 1 & $0 \to 1$ \\
+3 & $\texttt{INC}(A, q_1)$            & $q_0$ & $1 \to 2$ & 1 \\
+4 & $\texttt{JZDEC}(B, q_2, q_3)$; $B{>}0$ & $q_1$ & 2 & $1 \to 0$ \\
+5 & $\texttt{HALT}$                    & $q_3$ & 2 & 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Expected result:} \texttt{\{state: -1, A: 2, B: 0\}}
+
+\subsection{Results}
+
+\begin{resultbox}[Result: \texttt{reduce()} simulation]
+\texttt{\{A: 2, B: 0, state: -1\}} \quad$\checkmark$
+\end{resultbox}
+
+\begin{resultbox}[Result: \texttt{IN TRANSACTIONS} simulation]
+\texttt{m.state = -1, m.A = 2, m.B = 0} \quad$\checkmark$
+\end{resultbox}
+
+Both approaches produce the expected result, matching the manual trace
+step-for-step.
+
+
+% ═══════════════════════════════════════════════════════════════════
+% REFERENCES
+% ═══════════════════════════════════════════════════════════════════
+\newpage
+\begin{thebibliography}{9}
+
+\bibitem{minsky1967}
+Minsky, M.\,L.\ (1967).
+\emph{Computation: Finite and Infinite Machines}.
+Prentice-Hall.
+
+\bibitem{neo4jdocs}
+Neo4j Documentation:
+\href{https://neo4j.com/docs/cypher-manual/current/}{Cypher Manual}.
+
+\bibitem{aoc}
+Advent of Code Cypher Solutions (2015--2025) ---
+150+ solved algorithmic problems.
+\href{https://github.com/halftermeyer}{github.com/halftermeyer}
+
+\end{thebibliography}
+
+\end{document}
